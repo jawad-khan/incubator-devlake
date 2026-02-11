@@ -32,6 +32,7 @@ var basicRes context.BasicRes
 
 var dsHelper *api.DsHelper[models.AsanaConnection, models.AsanaProject, models.AsanaScopeConfig]
 var raProxy *api.DsRemoteApiProxyHelper[models.AsanaConnection]
+var raScopeList *api.DsRemoteApiScopeListHelper[models.AsanaConnection, models.AsanaProject, AsanaRemotePagination]
 
 func Init(br context.BasicRes, p plugin.PluginMeta) {
 	basicRes = br
@@ -49,4 +50,5 @@ func Init(br context.BasicRes, p plugin.PluginMeta) {
 		nil,
 	)
 	raProxy = api.NewDsRemoteApiProxyHelper[models.AsanaConnection](dsHelper.ConnApi.ModelApiHelper)
+	raScopeList = api.NewDsRemoteApiScopeListHelper[models.AsanaConnection, models.AsanaProject, AsanaRemotePagination](raProxy, listAsanaRemoteScopes)
 }

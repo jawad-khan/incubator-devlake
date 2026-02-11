@@ -25,7 +25,7 @@ import (
 
 func CreateRawDataSubTaskArgs(taskCtx plugin.SubTaskContext, rawTable string) (*api.RawDataSubTaskArgs, *AsanaTaskData) {
 	data := taskCtx.GetData().(*AsanaTaskData)
-	params := AsanaApiParams{
+	params := models.AsanaApiParams{
 		ConnectionId: data.Options.ConnectionId,
 		ProjectId:    data.Options.ProjectId,
 	}

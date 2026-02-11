@@ -25,6 +25,7 @@ import (
 	"github.com/apache/incubator-devlake/core/errors"
 	"github.com/apache/incubator-devlake/core/plugin"
 	"github.com/apache/incubator-devlake/helpers/pluginhelper/api"
+	"github.com/apache/incubator-devlake/plugins/asana/models"
 )
 
 const rawTaskTable = "asana_tasks"
@@ -36,7 +37,7 @@ var CollectTaskMeta = plugin.SubTaskMeta{
 	EntryPoint:       CollectTask,
 	EnabledByDefault: true,
 	Description:      "Collect task data from Asana API",
-	DomainTypes:      []string{},
+	DomainTypes:      []string{plugin.DOMAIN_TYPE_TICKET},
 }
 
 type asanaTaskListResponse struct {
@@ -53,7 +54,7 @@ func CollectTask(taskCtx plugin.SubTaskContext) errors.Error {
 	collector, err := api.NewApiCollector(api.ApiCollectorArgs{
 		RawDataSubTaskArgs: api.RawDataSubTaskArgs{
 			Ctx: taskCtx,
-			Params: AsanaApiParams{
+			Params: models.AsanaApiParams{
 				ConnectionId: data.Options.ConnectionId,
 				ProjectId:    data.Options.ProjectId,
 			},

@@ -34,6 +34,7 @@ var ExtractTaskMeta = plugin.SubTaskMeta{
 	EntryPoint:       ExtractTask,
 	EnabledByDefault: true,
 	Description:      "Extract raw data into tool layer table _tool_asana_tasks",
+	DomainTypes:      []string{plugin.DOMAIN_TYPE_TICKET},
 }
 
 type asanaApiTask struct {
@@ -86,7 +87,7 @@ func ExtractTask(taskCtx plugin.SubTaskContext) errors.Error {
 	extractor, err := api.NewApiExtractor(api.ApiExtractorArgs{
 		RawDataSubTaskArgs: api.RawDataSubTaskArgs{
 			Ctx: taskCtx,
-			Params: AsanaApiParams{
+			Params: models.AsanaApiParams{
 				ConnectionId: taskData.Options.ConnectionId,
 				ProjectId:    taskData.Options.ProjectId,
 			},

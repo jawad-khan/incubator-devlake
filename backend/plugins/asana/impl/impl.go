@@ -78,6 +78,7 @@ func (p Asana) SubTaskMetas() []plugin.SubTaskMeta {
 		tasks.ExtractSectionMeta,
 		tasks.CollectTaskMeta,
 		tasks.ExtractTaskMeta,
+		tasks.ConvertProjectMeta,
 		tasks.ConvertTaskMeta,
 	}
 }
@@ -149,6 +150,9 @@ func (p Asana) ApiResources() map[string]map[string]plugin.ApiResourceHandler {
 		},
 		"connections/:connectionId/proxy/rest/*path": {
 			"GET": api.Proxy,
+		},
+		"connections/:connectionId/remote-scopes": {
+			"GET": api.RemoteScopes,
 		},
 		"connections/:connectionId/scope-configs": {
 			"POST": api.PostScopeConfig,

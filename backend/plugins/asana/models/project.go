@@ -25,14 +25,13 @@ import (
 var _ plugin.ToolLayerScope = (*AsanaProject)(nil)
 
 type AsanaProject struct {
-	common.Scope    `mapstructure:",squash"`
-	ConnectionId    uint64 `json:"connectionId" mapstructure:"connectionId" gorm:"primaryKey"`
-	Gid             string `json:"gid" mapstructure:"gid" gorm:"type:varchar(255);primaryKey"`
-	Name            string `json:"name" mapstructure:"name" gorm:"type:varchar(255)"`
-	ResourceType    string `json:"resourceType" mapstructure:"resourceType" gorm:"type:varchar(32)"`
-	Archived        bool   `json:"archived" mapstructure:"archived"`
-	WorkspaceGid    string `json:"workspaceGid" mapstructure:"workspaceGid" gorm:"type:varchar(255)"`
-	PermalinkUrl    string `json:"permalinkUrl" mapstructure:"permalinkUrl" gorm:"type:varchar(512)"`
+	common.Scope `mapstructure:",squash"`
+	Gid          string `json:"gid" mapstructure:"gid" gorm:"type:varchar(255);primaryKey"`
+	Name         string `json:"name" mapstructure:"name" gorm:"type:varchar(255)"`
+	ResourceType string `json:"resourceType" mapstructure:"resourceType" gorm:"type:varchar(32)"`
+	Archived     bool   `json:"archived" mapstructure:"archived"`
+	WorkspaceGid string `json:"workspaceGid" mapstructure:"workspaceGid" gorm:"type:varchar(255)"`
+	PermalinkUrl string `json:"permalinkUrl" mapstructure:"permalinkUrl" gorm:"type:varchar(512)"`
 }
 
 func (p AsanaProject) ScopeId() string {

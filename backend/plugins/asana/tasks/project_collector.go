@@ -24,6 +24,7 @@ import (
 	"github.com/apache/incubator-devlake/core/errors"
 	"github.com/apache/incubator-devlake/core/plugin"
 	"github.com/apache/incubator-devlake/helpers/pluginhelper/api"
+	"github.com/apache/incubator-devlake/plugins/asana/models"
 )
 
 const rawProjectTable = "asana_projects"
@@ -35,7 +36,7 @@ var CollectProjectMeta = plugin.SubTaskMeta{
 	EntryPoint:       CollectProject,
 	EnabledByDefault: true,
 	Description:      "Collect project data from Asana API",
-	DomainTypes:      []string{},
+	DomainTypes:      []string{plugin.DOMAIN_TYPE_TICKET},
 }
 
 type asanaDataWrapper struct {
@@ -47,7 +48,7 @@ func CollectProject(taskCtx plugin.SubTaskContext) errors.Error {
 	collector, err := api.NewApiCollector(api.ApiCollectorArgs{
 		RawDataSubTaskArgs: api.RawDataSubTaskArgs{
 			Ctx: taskCtx,
-			Params: AsanaApiParams{
+			Params: models.AsanaApiParams{
 				ConnectionId: data.Options.ConnectionId,
 				ProjectId:    data.Options.ProjectId,
 			},

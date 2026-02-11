@@ -33,6 +33,7 @@ var ExtractProjectMeta = plugin.SubTaskMeta{
 	EntryPoint:       ExtractProject,
 	EnabledByDefault: true,
 	Description:      "Extract raw data into tool layer table _tool_asana_projects",
+	DomainTypes:      []string{plugin.DOMAIN_TYPE_TICKET},
 }
 
 type asanaApiProject struct {
@@ -51,7 +52,7 @@ func ExtractProject(taskCtx plugin.SubTaskContext) errors.Error {
 	extractor, err := api.NewApiExtractor(api.ApiExtractorArgs{
 		RawDataSubTaskArgs: api.RawDataSubTaskArgs{
 			Ctx: taskCtx,
-			Params: AsanaApiParams{
+			Params: models.AsanaApiParams{
 				ConnectionId: taskData.Options.ConnectionId,
 				ProjectId:    taskData.Options.ProjectId,
 			},
@@ -68,15 +69,15 @@ func ExtractProject(taskCtx plugin.SubTaskContext) errors.Error {
 				workspaceGid = apiProject.Workspace.Gid
 			}
 			toolProject := &models.AsanaProject{
-				ConnectionId:   taskData.Options.ConnectionId,
-				ScopeConfigId:  taskData.Options.ScopeConfigId,
-				Gid:            apiProject.Gid,
-				Name:           apiProject.Name,
-				ResourceType:   apiProject.ResourceType,
-				Archived:       apiProject.Archived,
-				PermalinkUrl:   apiProject.PermalinkUrl,
-				WorkspaceGid:   workspaceGid,
+				Gid:          apiProject.Gid,
+				Name:         apiProject.Name,
+				ResourceType: apiProject.ResourceType,
+				Archived:     apiProject.Archived,
+				PermalinkUrl: apiProject.PermalinkUrl,
+				WorkspaceGid: workspaceGid,
 			}
+			toolProject.ConnectionId = taskData.Options.ConnectionId
+			toolProject.ScopeConfigId = taskData.Options.ScopeConfigId
 			return []interface{}{toolProject}, nil
 		},
 	})
