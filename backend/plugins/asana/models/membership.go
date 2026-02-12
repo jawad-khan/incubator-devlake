@@ -21,17 +21,29 @@ import (
 	"github.com/apache/incubator-devlake/core/models/common"
 )
 
-type AsanaUser struct {
-	ConnectionId   uint64 `gorm:"primaryKey"`
-	Gid            string `gorm:"primaryKey;type:varchar(255)"`
-	Name           string `gorm:"type:varchar(255)"`
-	Email          string `gorm:"type:varchar(255)"`
-	ResourceType   string `gorm:"type:varchar(32)"`
-	PhotoUrl       string `gorm:"type:varchar(512)"`
-	WorkspaceGids  string `gorm:"type:text"` // JSON array of workspace GIDs
+// AsanaProjectMembership links users to projects with their role
+type AsanaProjectMembership struct {
+	ConnectionId uint64 `gorm:"primaryKey"`
+	ProjectGid   string `gorm:"primaryKey;type:varchar(255)"`
+	UserGid      string `gorm:"primaryKey;type:varchar(255)"`
+	Role         string `gorm:"type:varchar(32)"`
 	common.NoPKModel
 }
 
-func (AsanaUser) TableName() string {
-	return "_tool_asana_users"
+func (AsanaProjectMembership) TableName() string {
+	return "_tool_asana_project_memberships"
 }
+
+// AsanaTeamMembership links users to teams
+type AsanaTeamMembership struct {
+	ConnectionId uint64 `gorm:"primaryKey"`
+	TeamGid      string `gorm:"primaryKey;type:varchar(255)"`
+	UserGid      string `gorm:"primaryKey;type:varchar(255)"`
+	IsGuest      bool   `json:"isGuest"`
+	common.NoPKModel
+}
+
+func (AsanaTeamMembership) TableName() string {
+	return "_tool_asana_team_memberships"
+}
+

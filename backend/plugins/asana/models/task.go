@@ -24,26 +24,40 @@ import (
 )
 
 type AsanaTask struct {
-	ConnectionId   uint64     `gorm:"primaryKey"`
-	Gid            string     `gorm:"primaryKey;type:varchar(255)"`
-	Name           string     `gorm:"type:varchar(512)"`
-	Notes          string     `gorm:"type:text"`
-	ResourceType   string     `gorm:"type:varchar(32)"`
-	ResourceSubtype string    `gorm:"type:varchar(32)"`
-	Completed      bool       `json:"completed"`
-	CompletedAt    *time.Time `json:"completedAt"`
-	DueOn          *time.Time `gorm:"type:date" json:"dueOn"`
-	CreatedAt      time.Time  `json:"createdAt"`
-	ModifiedAt     *time.Time `json:"modifiedAt"`
-	PermalinkUrl   string     `gorm:"type:varchar(512)"`
-	ProjectGid     string     `gorm:"type:varchar(255);index"`
-	SectionGid     string     `gorm:"type:varchar(255);index"`
-	AssigneeGid    string     `gorm:"type:varchar(255)"`
-	AssigneeName   string     `gorm:"type:varchar(255)"`
-	CreatorGid     string     `gorm:"type:varchar(255)"`
-	CreatorName    string     `gorm:"type:varchar(255)"`
-	ParentGid      string     `gorm:"type:varchar(255);index"`
-	NumSubtasks    int        `json:"numSubtasks"`
+	ConnectionId    uint64     `gorm:"primaryKey"`
+	Gid             string     `gorm:"primaryKey;type:varchar(255)"`
+	Name            string     `gorm:"type:varchar(512)"`
+	Notes           string     `gorm:"type:text"`
+	ResourceType    string     `gorm:"type:varchar(32)"`
+	ResourceSubtype string     `gorm:"type:varchar(32)"` // default_task, milestone, section, approval
+	Completed       bool       `json:"completed"`
+	CompletedAt     *time.Time `json:"completedAt"`
+	DueOn           *time.Time `gorm:"type:date" json:"dueOn"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	ModifiedAt      *time.Time `json:"modifiedAt"`
+	PermalinkUrl    string     `gorm:"type:varchar(512)"`
+	ProjectGid      string     `gorm:"type:varchar(255);index"`
+	SectionGid      string     `gorm:"type:varchar(255);index"`
+	SectionName     string     `gorm:"type:varchar(255)"` // For status mapping
+	AssigneeGid     string     `gorm:"type:varchar(255)"`
+	AssigneeName    string     `gorm:"type:varchar(255)"`
+	CreatorGid      string     `gorm:"type:varchar(255)"`
+	CreatorName     string     `gorm:"type:varchar(255)"`
+	ParentGid       string     `gorm:"type:varchar(255);index"`
+	NumSubtasks     int        `json:"numSubtasks"`
+
+	// Transformed fields for domain layer
+	StdType   string `gorm:"type:varchar(255)"` // Standard type: REQUIREMENT, BUG, INCIDENT, EPIC, TASK, SUBTASK
+	StdStatus string `gorm:"type:varchar(255)"` // Standard status: TODO, IN_PROGRESS, DONE
+
+	// Custom field values (extracted during transformation)
+	Priority   string   `gorm:"type:varchar(255)"` // Priority from custom field
+	StoryPoint *float64 `json:"storyPoint"`        // Story points from custom field
+	Severity   string   `gorm:"type:varchar(255)"` // Severity from custom field
+
+	// Lead time tracking
+	LeadTimeMinutes *uint `json:"leadTimeMinutes"`
+
 	common.NoPKModel
 }
 

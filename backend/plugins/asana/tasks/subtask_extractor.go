@@ -27,63 +27,17 @@ import (
 	"github.com/apache/incubator-devlake/plugins/asana/models"
 )
 
-var _ plugin.SubTaskEntryPoint = ExtractTask
+var _ plugin.SubTaskEntryPoint = ExtractSubtask
 
-var ExtractTaskMeta = plugin.SubTaskMeta{
-	Name:             "ExtractTask",
-	EntryPoint:       ExtractTask,
+var ExtractSubtaskMeta = plugin.SubTaskMeta{
+	Name:             "ExtractSubtask",
+	EntryPoint:       ExtractSubtask,
 	EnabledByDefault: true,
-	Description:      "Extract raw data into tool layer table _tool_asana_tasks",
+	Description:      "Extract raw subtask data into tool layer table _tool_asana_tasks",
 	DomainTypes:      []string{plugin.DOMAIN_TYPE_TICKET},
 }
 
-type asanaApiTask struct {
-	Gid            string `json:"gid"`
-	Name          string `json:"name"`
-	Notes         string `json:"notes"`
-	ResourceType  string `json:"resource_type"`
-	ResourceSubtype string `json:"resource_subtype"`
-	Completed     bool   `json:"completed"`
-	CompletedAt   *time.Time `json:"completed_at"`
-	DueOn         string `json:"due_on"`
-	CreatedAt     time.Time `json:"created_at"`
-	ModifiedAt    *time.Time `json:"modified_at"`
-	PermalinkUrl  string `json:"permalink_url"`
-	Assignee      *struct {
-		Gid  string `json:"gid"`
-		Name string `json:"name"`
-	} `json:"assignee"`
-	CreatedBy *struct {
-		Gid  string `json:"gid"`
-		Name string `json:"name"`
-	} `json:"created_by"`
-	Parent *struct {
-		Gid string `json:"gid"`
-	} `json:"parent"`
-	NumSubtasks int `json:"num_subtasks"`
-	Memberships []struct {
-		Section *struct {
-			Gid  string `json:"gid"`
-			Name string `json:"name"`
-		} `json:"section"`
-		Project *struct {
-			Gid string `json:"gid"`
-		} `json:"project"`
-	} `json:"memberships"`
-}
-
-func parseAsanaDate(s string) *time.Time {
-	if s == "" {
-		return nil
-	}
-	t, err := time.Parse("2006-01-02", s)
-	if err != nil {
-		return nil
-	}
-	return &t
-}
-
-func ExtractTask(taskCtx plugin.SubTaskContext) errors.Error {
+func ExtractSubtask(taskCtx plugin.SubTaskContext) errors.Error {
 	taskData := taskCtx.GetData().(*AsanaTaskData)
 	extractor, err := api.NewApiExtractor(api.ApiExtractorArgs{
 		RawDataSubTaskArgs: api.RawDataSubTaskArgs{
@@ -92,7 +46,7 @@ func ExtractTask(taskCtx plugin.SubTaskContext) errors.Error {
 				ConnectionId: taskData.Options.ConnectionId,
 				ProjectId:    taskData.Options.ProjectId,
 			},
-			Table: rawTaskTable,
+			Table: rawSubtaskTable,
 		},
 		Extract: func(resData *api.RawData) ([]interface{}, errors.Error) {
 			apiTask := &asanaApiTask{}
@@ -100,6 +54,15 @@ func ExtractTask(taskCtx plugin.SubTaskContext) errors.Error {
 			if err != nil {
 				return nil, err
 			}
+
+			// Get parent GID from input
+			var input struct {
+				Gid string `json:"gid"`
+			}
+			if err := errors.Convert(json.Unmarshal(resData.Input, &input)); err != nil {
+				return nil, err
+			}
+
 			assigneeGid := ""
 			assigneeName := ""
 			if apiTask.Assignee != nil {
@@ -112,12 +75,7 @@ func ExtractTask(taskCtx plugin.SubTaskContext) errors.Error {
 				creatorGid = apiTask.CreatedBy.Gid
 				creatorName = apiTask.CreatedBy.Name
 			}
-			parentGid := ""
-			if apiTask.Parent != nil {
-				parentGid = apiTask.Parent.Gid
-			}
 			sectionGid := ""
-			sectionName := ""
 			projectGid := taskData.Options.ProjectId
 			for _, m := range apiTask.Memberships {
 				if m.Project != nil {
@@ -125,10 +83,15 @@ func ExtractTask(taskCtx plugin.SubTaskContext) errors.Error {
 				}
 				if m.Section != nil && m.Section.Gid != "" {
 					sectionGid = m.Section.Gid
-					sectionName = m.Section.Name
 					break
 				}
 			}
+
+			var dueOn *time.Time
+			if apiTask.DueOn != "" {
+				dueOn = parseAsanaDate(apiTask.DueOn)
+			}
+
 			toolTask := &models.AsanaTask{
 				ConnectionId:    taskData.Options.ConnectionId,
 				Gid:             apiTask.Gid,
@@ -138,18 +101,17 @@ func ExtractTask(taskCtx plugin.SubTaskContext) errors.Error {
 				ResourceSubtype: apiTask.ResourceSubtype,
 				Completed:       apiTask.Completed,
 				CompletedAt:     apiTask.CompletedAt,
-				DueOn:           parseAsanaDate(apiTask.DueOn),
+				DueOn:           dueOn,
 				CreatedAt:       apiTask.CreatedAt,
 				ModifiedAt:      apiTask.ModifiedAt,
 				PermalinkUrl:    apiTask.PermalinkUrl,
 				ProjectGid:      projectGid,
 				SectionGid:      sectionGid,
-				SectionName:     sectionName,
 				AssigneeGid:     assigneeGid,
 				AssigneeName:    assigneeName,
 				CreatorGid:      creatorGid,
 				CreatorName:     creatorName,
-				ParentGid:       parentGid,
+				ParentGid:       input.Gid, // Parent is the task that has subtasks
 				NumSubtasks:     apiTask.NumSubtasks,
 			}
 			return []interface{}{toolTask}, nil
@@ -160,3 +122,4 @@ func ExtractTask(taskCtx plugin.SubTaskContext) errors.Error {
 	}
 	return extractor.Execute()
 }
+

@@ -59,6 +59,15 @@ func (p Asana) GetTablesInfo() []dal.Tabler {
 		&models.AsanaTask{},
 		&models.AsanaSection{},
 		&models.AsanaUser{},
+		&models.AsanaWorkspace{},
+		&models.AsanaTeam{},
+		&models.AsanaStory{},
+		&models.AsanaTag{},
+		&models.AsanaTaskTag{},
+		&models.AsanaCustomField{},
+		&models.AsanaTaskCustomFieldValue{},
+		&models.AsanaProjectMembership{},
+		&models.AsanaTeamMembership{},
 	}
 }
 
@@ -72,14 +81,33 @@ func (p Asana) Name() string {
 
 func (p Asana) SubTaskMetas() []plugin.SubTaskMeta {
 	return []plugin.SubTaskMeta{
+		// Collect and extract in hierarchical order
+		// 1. Project (scope)
 		tasks.CollectProjectMeta,
 		tasks.ExtractProjectMeta,
+		// 2. Users (project members)
+		tasks.CollectUserMeta,
+		tasks.ExtractUserMeta,
+		// 3. Sections
 		tasks.CollectSectionMeta,
 		tasks.ExtractSectionMeta,
+		// 4. Tasks
 		tasks.CollectTaskMeta,
 		tasks.ExtractTaskMeta,
+		// 5. Subtasks (children of tasks)
+		tasks.CollectSubtaskMeta,
+		tasks.ExtractSubtaskMeta,
+		// 6. Stories (comments on tasks)
+		tasks.CollectStoryMeta,
+		tasks.ExtractStoryMeta,
+		// 7. Tags (on tasks)
+		tasks.CollectTagMeta,
+		tasks.ExtractTagMeta,
+		// Convert to domain layer
 		tasks.ConvertProjectMeta,
+		tasks.ConvertUserMeta,
 		tasks.ConvertTaskMeta,
+		tasks.ConvertStoryMeta,
 	}
 }
 

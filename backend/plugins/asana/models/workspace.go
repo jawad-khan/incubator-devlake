@@ -15,18 +15,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package migrationscripts
+package models
 
 import (
-	"github.com/apache/incubator-devlake/core/plugin"
+	"github.com/apache/incubator-devlake/core/models/common"
 )
 
-// All return all the migration scripts
-func All() []plugin.MigrationScript {
-	return []plugin.MigrationScript{
-		new(addInitTables),
-		new(addUserPhotoUrl),
-		new(addMissingTables),
-		new(addTaskTransformationFields),
-	}
+type AsanaWorkspace struct {
+	ConnectionId uint64 `gorm:"primaryKey"`
+	Gid          string `gorm:"primaryKey;type:varchar(255)"`
+	Name         string `gorm:"type:varchar(255)"`
+	ResourceType string `gorm:"type:varchar(32)"`
+	IsOrganization bool  `json:"isOrganization"`
+	common.NoPKModel
 }
+
+func (AsanaWorkspace) TableName() string {
+	return "_tool_asana_workspaces"
+}
+

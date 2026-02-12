@@ -16,6 +16,7 @@
  *
  */
 
+import { DOC_URL } from '@/release';
 import { IPluginConfig } from '@/types';
 
 import Icon from './assets/icon.svg?react';
@@ -26,6 +27,7 @@ export const AsanaConfig: IPluginConfig = {
   icon: ({ color }) => <Icon fill={color} />,
   sort: 12,
   connection: {
+    docLink: DOC_URL.PLUGIN.ASANA.BASIS,
     initialValues: {
       endpoint: 'https://app.asana.com/api/1.0/',
     },
@@ -47,9 +49,31 @@ export const AsanaConfig: IPluginConfig = {
   },
   dataScope: {
     title: 'Projects',
+    millerColumn: {
+      columnCount: 4,
+      firstColumnTitle: 'Workspaces',
+    },
+    searchPlaceholder: 'Search projects...',
   },
   scopeConfig: {
     entities: ['TICKET'],
-    transformation: {},
+    transformation: {
+      typeMappings: {
+        label: 'Issue Type Mappings',
+        externalInfo: 'Map Asana task types (default_task, milestone, approval) to standard types (REQUIREMENT, BUG, INCIDENT, EPIC, TASK, SUBTASK)',
+      },
+      storyPointField: {
+        label: 'Story Point Field',
+        subLabel: 'Custom field name containing story points',
+      },
+      priorityField: {
+        label: 'Priority Field',
+        subLabel: 'Custom field name containing priority',
+      },
+      applicationField: {
+        label: 'Application Type',
+        subLabel: 'Application type for categorization',
+      },
+    },
   },
 };

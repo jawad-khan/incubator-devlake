@@ -24,17 +24,12 @@ import (
 	"github.com/apache/incubator-devlake/plugins/asana/models"
 )
 
-type addInitTables struct{}
+type addMissingTables struct{}
 
-func (*addInitTables) Up(basicRes context.BasicRes) errors.Error {
+func (*addMissingTables) Up(basicRes context.BasicRes) errors.Error {
+	// Add all the new tables that were added after the initial migration
 	return migrationhelper.AutoMigrateTables(
 		basicRes,
-		&models.AsanaConnection{},
-		&models.AsanaProject{},
-		&models.AsanaScopeConfig{},
-		&models.AsanaTask{},
-		&models.AsanaSection{},
-		&models.AsanaUser{},
 		&models.AsanaWorkspace{},
 		&models.AsanaTeam{},
 		&models.AsanaStory{},
@@ -47,10 +42,11 @@ func (*addInitTables) Up(basicRes context.BasicRes) errors.Error {
 	)
 }
 
-func (*addInitTables) Version() uint64 {
-	return 20250203000001
+func (*addMissingTables) Version() uint64 {
+	return 20250212000002
 }
 
-func (*addInitTables) Name() string {
-	return "asana init schemas"
+func (*addMissingTables) Name() string {
+	return "asana add missing tables for hierarchical data"
 }
+

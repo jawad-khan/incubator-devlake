@@ -21,36 +21,48 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"reflect"
 
+	"github.com/apache/incubator-devlake/core/dal"
 	"github.com/apache/incubator-devlake/core/errors"
 	"github.com/apache/incubator-devlake/core/plugin"
 	"github.com/apache/incubator-devlake/helpers/pluginhelper/api"
 	"github.com/apache/incubator-devlake/plugins/asana/models"
 )
 
-const rawTaskTable = "asana_tasks"
+const rawSubtaskTable = "asana_subtasks"
 
-var _ plugin.SubTaskEntryPoint = CollectTask
+var _ plugin.SubTaskEntryPoint = CollectSubtask
 
-var CollectTaskMeta = plugin.SubTaskMeta{
-	Name:             "CollectTask",
-	EntryPoint:       CollectTask,
+var CollectSubtaskMeta = plugin.SubTaskMeta{
+	Name:             "CollectSubtask",
+	EntryPoint:       CollectSubtask,
 	EnabledByDefault: true,
-	Description:      "Collect task data from Asana API",
+	Description:      "Collect subtask data from Asana API for each task",
 	DomainTypes:      []string{plugin.DOMAIN_TYPE_TICKET},
 }
 
-type asanaTaskListResponse struct {
-	Data []json.RawMessage `json:"data"`
-	NextPage *struct {
-		Offset string `json:"offset"`
-		Path   string `json:"path"`
-		URI    string `json:"uri"`
-	} `json:"next_page"`
-}
-
-func CollectTask(taskCtx plugin.SubTaskContext) errors.Error {
+func CollectSubtask(taskCtx plugin.SubTaskContext) errors.Error {
 	data := taskCtx.GetData().(*AsanaTaskData)
+	db := taskCtx.GetDal()
+
+	// Get all tasks that have subtasks
+	clauses := []dal.Clause{
+		dal.Select("gid"),
+		dal.From(&models.AsanaTask{}),
+		dal.Where("connection_id = ? AND project_gid = ? AND num_subtasks > 0",
+			data.Options.ConnectionId, data.Options.ProjectId),
+	}
+	cursor, err := db.Cursor(clauses...)
+	if err != nil {
+		return err
+	}
+
+	iterator, err := api.NewDalCursorIterator(db, cursor, reflect.TypeOf(simpleTask{}))
+	if err != nil {
+		return err
+	}
+
 	collector, err := api.NewApiCollector(api.ApiCollectorArgs{
 		RawDataSubTaskArgs: api.RawDataSubTaskArgs{
 			Ctx: taskCtx,
@@ -58,41 +70,24 @@ func CollectTask(taskCtx plugin.SubTaskContext) errors.Error {
 				ConnectionId: data.Options.ConnectionId,
 				ProjectId:    data.Options.ProjectId,
 			},
-			Table: rawTaskTable,
+			Table: rawSubtaskTable,
 		},
 		ApiClient:   data.ApiClient,
-		PageSize:    100,
-		UrlTemplate: "projects/{{ .Params.ProjectId }}/tasks",
+		Input:       iterator,
+		UrlTemplate: "tasks/{{ .Input.Gid }}/subtasks",
 		Query: func(reqData *api.RequestData) (url.Values, errors.Error) {
 			query := url.Values{}
+			query.Set("opt_fields", "gid,name,notes,resource_type,resource_subtype,completed,completed_at,due_on,created_at,modified_at,permalink_url,assignee,created_by,parent,num_subtasks,memberships.section,memberships.project")
 			query.Set("limit", "100")
-			// Request all fields needed for transformation including section name
-			query.Set("opt_fields", "gid,name,notes,resource_type,resource_subtype,completed,completed_at,due_on,created_at,modified_at,permalink_url,assignee,assignee.name,created_by,created_by.name,parent,num_subtasks,memberships.section,memberships.section.name,memberships.project")
-			if reqData.CustomData != nil {
-				if offset, ok := reqData.CustomData.(string); ok && offset != "" {
-					query.Set("offset", offset)
-				}
-			}
 			return query, nil
 		},
-		GetNextPageCustomData: func(prevReqData *api.RequestData, prevPageResponse *http.Response) (interface{}, errors.Error) {
-			var resp asanaTaskListResponse
-			err := api.UnmarshalResponse(prevPageResponse, &resp)
-			if err != nil {
-				return nil, err
-			}
-			if resp.NextPage != nil && resp.NextPage.Offset != "" {
-				return resp.NextPage.Offset, nil
-			}
-			return nil, nil
-		},
 		ResponseParser: func(res *http.Response) ([]json.RawMessage, errors.Error) {
-			var w asanaTaskListResponse
-			err := api.UnmarshalResponse(res, &w)
+			var resp asanaListResponse
+			err := api.UnmarshalResponse(res, &resp)
 			if err != nil {
 				return nil, err
 			}
-			return w.Data, nil
+			return resp.Data, nil
 		},
 	})
 	if err != nil {
@@ -100,3 +95,4 @@ func CollectTask(taskCtx plugin.SubTaskContext) errors.Error {
 	}
 	return collector.Execute()
 }
+

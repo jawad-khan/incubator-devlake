@@ -28,28 +28,19 @@ import (
 	"github.com/apache/incubator-devlake/plugins/asana/models"
 )
 
-const rawTaskTable = "asana_tasks"
+const rawUserTable = "asana_users"
 
-var _ plugin.SubTaskEntryPoint = CollectTask
+var _ plugin.SubTaskEntryPoint = CollectUser
 
-var CollectTaskMeta = plugin.SubTaskMeta{
-	Name:             "CollectTask",
-	EntryPoint:       CollectTask,
+var CollectUserMeta = plugin.SubTaskMeta{
+	Name:             "CollectUser",
+	EntryPoint:       CollectUser,
 	EnabledByDefault: true,
-	Description:      "Collect task data from Asana API",
-	DomainTypes:      []string{plugin.DOMAIN_TYPE_TICKET},
+	Description:      "Collect user data from Asana API (project members)",
+	DomainTypes:      []string{plugin.DOMAIN_TYPE_CROSS},
 }
 
-type asanaTaskListResponse struct {
-	Data []json.RawMessage `json:"data"`
-	NextPage *struct {
-		Offset string `json:"offset"`
-		Path   string `json:"path"`
-		URI    string `json:"uri"`
-	} `json:"next_page"`
-}
-
-func CollectTask(taskCtx plugin.SubTaskContext) errors.Error {
+func CollectUser(taskCtx plugin.SubTaskContext) errors.Error {
 	data := taskCtx.GetData().(*AsanaTaskData)
 	collector, err := api.NewApiCollector(api.ApiCollectorArgs{
 		RawDataSubTaskArgs: api.RawDataSubTaskArgs{
@@ -58,16 +49,15 @@ func CollectTask(taskCtx plugin.SubTaskContext) errors.Error {
 				ConnectionId: data.Options.ConnectionId,
 				ProjectId:    data.Options.ProjectId,
 			},
-			Table: rawTaskTable,
+			Table: rawUserTable,
 		},
 		ApiClient:   data.ApiClient,
 		PageSize:    100,
-		UrlTemplate: "projects/{{ .Params.ProjectId }}/tasks",
+		UrlTemplate: "projects/{{ .Params.ProjectId }}/members",
 		Query: func(reqData *api.RequestData) (url.Values, errors.Error) {
 			query := url.Values{}
+			query.Set("opt_fields", "gid,name,email,resource_type,photo.image_128x128")
 			query.Set("limit", "100")
-			// Request all fields needed for transformation including section name
-			query.Set("opt_fields", "gid,name,notes,resource_type,resource_subtype,completed,completed_at,due_on,created_at,modified_at,permalink_url,assignee,assignee.name,created_by,created_by.name,parent,num_subtasks,memberships.section,memberships.section.name,memberships.project")
 			if reqData.CustomData != nil {
 				if offset, ok := reqData.CustomData.(string); ok && offset != "" {
 					query.Set("offset", offset)
@@ -76,7 +66,7 @@ func CollectTask(taskCtx plugin.SubTaskContext) errors.Error {
 			return query, nil
 		},
 		GetNextPageCustomData: func(prevReqData *api.RequestData, prevPageResponse *http.Response) (interface{}, errors.Error) {
-			var resp asanaTaskListResponse
+			var resp asanaListResponse
 			err := api.UnmarshalResponse(prevPageResponse, &resp)
 			if err != nil {
 				return nil, err
@@ -87,12 +77,12 @@ func CollectTask(taskCtx plugin.SubTaskContext) errors.Error {
 			return nil, nil
 		},
 		ResponseParser: func(res *http.Response) ([]json.RawMessage, errors.Error) {
-			var w asanaTaskListResponse
-			err := api.UnmarshalResponse(res, &w)
+			var resp asanaListResponse
+			err := api.UnmarshalResponse(res, &resp)
 			if err != nil {
 				return nil, err
 			}
-			return w.Data, nil
+			return resp.Data, nil
 		},
 	})
 	if err != nil {
@@ -100,3 +90,13 @@ func CollectTask(taskCtx plugin.SubTaskContext) errors.Error {
 	}
 	return collector.Execute()
 }
+
+type asanaListResponse struct {
+	Data     []json.RawMessage `json:"data"`
+	NextPage *struct {
+		Offset string `json:"offset"`
+		Path   string `json:"path"`
+		URI    string `json:"uri"`
+	} `json:"next_page"`
+}
+

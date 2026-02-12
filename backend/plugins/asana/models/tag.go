@@ -21,17 +21,31 @@ import (
 	"github.com/apache/incubator-devlake/core/models/common"
 )
 
-type AsanaUser struct {
-	ConnectionId   uint64 `gorm:"primaryKey"`
-	Gid            string `gorm:"primaryKey;type:varchar(255)"`
-	Name           string `gorm:"type:varchar(255)"`
-	Email          string `gorm:"type:varchar(255)"`
-	ResourceType   string `gorm:"type:varchar(32)"`
-	PhotoUrl       string `gorm:"type:varchar(512)"`
-	WorkspaceGids  string `gorm:"type:text"` // JSON array of workspace GIDs
+type AsanaTag struct {
+	ConnectionId uint64 `gorm:"primaryKey"`
+	Gid          string `gorm:"primaryKey;type:varchar(255)"`
+	Name         string `gorm:"type:varchar(255)"`
+	ResourceType string `gorm:"type:varchar(32)"`
+	Color        string `gorm:"type:varchar(32)"`
+	Notes        string `gorm:"type:text"`
+	WorkspaceGid string `gorm:"type:varchar(255);index"`
+	PermalinkUrl string `gorm:"type:varchar(512)"`
 	common.NoPKModel
 }
 
-func (AsanaUser) TableName() string {
-	return "_tool_asana_users"
+func (AsanaTag) TableName() string {
+	return "_tool_asana_tags"
 }
+
+// AsanaTaskTag is a many-to-many relationship between tasks and tags
+type AsanaTaskTag struct {
+	ConnectionId uint64 `gorm:"primaryKey"`
+	TaskGid      string `gorm:"primaryKey;type:varchar(255)"`
+	TagGid       string `gorm:"primaryKey;type:varchar(255)"`
+	common.NoPKModel
+}
+
+func (AsanaTaskTag) TableName() string {
+	return "_tool_asana_task_tags"
+}
+
