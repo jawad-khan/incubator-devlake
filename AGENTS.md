@@ -130,3 +130,93 @@ Located in `backend/python/plugins/`. Use Poetry for dependencies. See [backend/
 - Migration scripts must be added to `All()` in `register.go`
 - API changes require running `make swag` to update Swagger docs
 - Python plugins require `libgit2` for gitextractor functionality
+
+## Asana Plugin Implementation (2025-02-03)
+
+### Overview
+Implemented a complete Asana plugin (`backend/plugins/asana/`) to collect projects (boards), sections, and tasks from Asana's REST API and map them to DevLake's ticket/board domain model.
+
+### Architecture Decisions
+- **Scope Model**: Asana **Project** = DevLake **Board** (scope)
+- **Authentication**: Personal Access Token (PAT) via Bearer token (`Authorization: Bearer <token>`)
+- **API Base URL**: `https://app.asana.com/api/1.0/` (default endpoint)
+- **Pagination**: Asana uses offset-based pagination via `next_page.offset` in response; implemented sequential fetching with `GetNextPageCustomData`
+
+### Implementation Details
+
+#### Models (`backend/plugins/asana/models/`)
+- **Connection** (`connection.go`): `AsanaConn` (Token, RestConnection), `AsanaConnection` (BaseConnection + AsanaConn)
+- **Scope** (`project.go`): `AsanaProject` implements `ToolLayerScope`; primary key: `(ConnectionId, Gid)`
+- **Scope Config** (`scope_config.go`): `AsanaScopeConfig` embeds `common.ScopeConfig` with `Entities: ["TICKET"]`
+- **Tool Layer**:
+  - `task.go`: `AsanaTask` (Gid, Name, Notes, Completed, DueOn, ProjectGid, SectionGid, AssigneeGid, CreatorGid, etc.)
+  - `section.go`: `AsanaSection` (Gid, Name, ProjectGid)
+  - `user.go`: `AsanaUser` (Gid, Name, Email) - optional, for assignee/creator enrichment
+- **Migration**: `20250203_add_init_tables.go` creates all tables via `migrationhelper.AutoMigrateTables`
+
+#### API Layer (`backend/plugins/asana/api/`)
+- **Connection API** (`connection_api.go`): Test connection via `GET users/me`, CRUD operations, default endpoint handling
+- **Scope API** (`scope_api.go`): PutScopes, GetScopeList, GetScope, PatchScope, DeleteScope (uses `:scopeId` path param, not `:projectId`)
+- **Scope Config API** (`scope_config_api.go`): Full CRUD for scope configs
+- **Blueprint V200** (`blueprint_v200.go`): Maps Asana projects to `ticket.Board` domain entities when scope config includes `DOMAIN_TYPE_TICKET`
+- **Remote API** (`remote_api.go`): Proxy endpoint for direct API access
+- **Init** (`init.go`): Sets up `DsHelper[AsanaConnection, AsanaProject, AsanaScopeConfig]` with default endpoint
+
+#### Tasks (`backend/plugins/asana/tasks/`)
+- **Project**: `project_collector.go` (GET `/projects/{gid}`), `project_extractor.go` (extracts to `_tool_asana_projects`)
+- **Section**: `section_collector.go` (GET `/projects/{gid}/sections`), `section_extractor.go` (extracts to `_tool_asana_sections`)
+- **Task**: 
+  - `task_collector.go`: Collects tasks with offset pagination (limit=100, offset from `next_page.offset`)
+  - `task_extractor.go`: Extracts task data including memberships (project/section), assignee, creator, parent
+  - `task_convertor.go`: Converts `AsanaTask` → `ticket.Issue` + `ticket.BoardIssue` using `didgen` for domain IDs
+- **API Client** (`api_client.go`): Creates `ApiAsyncClient` with Bearer auth, sets default endpoint if missing
+- **Task Data** (`task_data.go`): `AsanaOptions` (ConnectionId, ProjectId, ScopeConfigId), `AsanaTaskData`, `CreateRawDataSubTaskArgs` helper
+
+#### Plugin Entry (`backend/plugins/asana/`)
+- **Main** (`asana.go`): `PluginEntry impl.Asana` for plugin loading
+- **Impl** (`impl/impl.go`): Implements all required interfaces:
+  - `PluginMeta`: Name="asana", Description, RootPkgPath
+  - `PluginTask`: SubTaskMetas (CollectProject, ExtractProject, CollectSection, ExtractSection, CollectTask, ExtractTask, ConvertTask)
+  - `PluginModel`: GetTablesInfo() returns all 6 models
+  - `PluginMigration`: MigrationScripts() from migrationscripts.All()
+  - `PluginApi`: ApiResources() with connections, scopes, scope-configs, test, proxy routes
+  - `PluginSource`: Connection(), Scope(), ScopeConfig()
+  - `DataSourcePluginBlueprintV200`: MakeDataSourcePipelinePlanV200()
+  - `CloseablePluginTask`: Close() releases ApiClient
+
+#### Config UI (`config-ui/src/plugins/register/asana/`)
+- **Config** (`config.tsx`): `AsanaConfig` with:
+  - Connection fields: name, endpoint (default: `https://app.asana.com/api/1.0/`), token, proxy, rateLimitPerHour (default: 150)
+  - Data scope title: "Projects"
+  - Scope config entities: `['TICKET']`
+- **Icon** (`assets/icon.svg`): Placeholder SVG icon
+- **Registration** (`index.ts`): Exports `AsanaConfig`
+- **Plugin Registry** (`config-ui/src/plugins/register/index.ts`): Added `AsanaConfig` to `pluginConfigs` array
+
+#### Testing
+- **Table Info Test** (`backend/plugins/table_info_test.go`): Added `asana` import and `checker.FeedIn("asana/models", asana.Asana{}.GetTablesInfo)`
+- **E2E Test** (`backend/plugins/asana/e2e/task_test.go`): 
+  - Imports raw task CSV (`e2e/raw_tables/_raw_asana_tasks.csv`)
+  - Runs `ExtractTaskMeta` subtask
+  - Verifies `_tool_asana_tasks` against snapshot (`e2e/snapshot_tables/_tool_asana_tasks.csv`)
+
+### Key Implementation Notes
+1. **Scope ID**: Uses `:scopeId` path param (not `:projectId`) to match generic scope helper expectations; scope ID is Asana project GID
+2. **Response Parsing**: Asana API wraps responses in `{"data": {...}}` or `{"data": [...], "next_page": {...}}`; collectors unwrap `data` field
+3. **Date Parsing**: `due_on` is date-only string (`YYYY-MM-DD`); `parseAsanaDate()` helper converts to `*time.Time`
+4. **Task Memberships**: Tasks can belong to multiple projects/sections; extractor uses first section from memberships array
+5. **Domain Conversion**: Task status maps: `completed=true` → `ticket.DONE`, `completed=false` → `ticket.TODO`
+6. **Default Endpoint**: Set in `api/init.go` constant and applied in `PostConnections` if missing from request
+
+### Files Created
+- **Backend**: 25+ Go files across `models/`, `api/`, `tasks/`, `impl/`, `e2e/`
+- **Config UI**: 3 TypeScript files (`config.tsx`, `index.ts`, `assets/icon.svg`)
+- **Test**: 1 CSV fixture pair (raw + snapshot), 1 E2E test file
+- **CI**: Updated `table_info_test.go`
+
+### Next Steps (Optional Enhancements)
+- Add user collection/enrichment for assignee/creator names
+- Support OAuth 2.0 authentication (currently PAT only)
+- Add task comments/subtasks collection
+- Implement incremental collection with time-based bookmarking
+- Add transformation rules for custom field mappings

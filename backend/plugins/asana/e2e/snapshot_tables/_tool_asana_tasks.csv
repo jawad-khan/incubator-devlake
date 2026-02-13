@@ -1,0 +1,2 @@
+connection_id,gid,name,notes,resource_type,resource_subtype,completed,project_gid,section_gid,permalink_url,num_subtasks
+1,987654321,Test Task,Notes here,task,default_task,0,123456789,111,https://app.asana.com/0/123/987654321,0
