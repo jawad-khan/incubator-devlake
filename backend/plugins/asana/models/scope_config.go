@@ -21,45 +21,14 @@ import (
 	"github.com/apache/incubator-devlake/core/models/common"
 )
 
-// StatusMapping maps Asana statuses to standard statuses
-type AsanaStatusMapping struct {
-	StandardStatus string `json:"standardStatus"`
-}
-
-// AsanaStatusMappings is a map of section/status names to their mappings
-type AsanaStatusMappings map[string]AsanaStatusMapping
-
-// AsanaTypeMapping maps Asana task types to standard types with their status mappings
-type AsanaTypeMapping struct {
-	StandardType   string              `json:"standardType"`
-	StatusMappings AsanaStatusMappings `json:"statusMappings"`
-}
-
 type AsanaScopeConfig struct {
 	common.ScopeConfig `mapstructure:",squash" json:",inline" gorm:"embedded"`
 
-	// Type and Status Mappings (like Jira)
-	// Maps Asana resource_subtype (default_task, milestone, section, approval) to standard types
-	// Standard types: REQUIREMENT, BUG, INCIDENT, EPIC, TASK, SUBTASK
-	TypeMappings map[string]AsanaTypeMapping `mapstructure:"typeMappings,omitempty" json:"typeMappings" gorm:"type:json;serializer:json"`
-
-	// Application type for categorization
-	ApplicationType string `mapstructure:"applicationType,omitempty" json:"applicationType" gorm:"type:varchar(255)"`
-
-	// Story Point field - custom field name/gid that contains story points
-	StoryPointField string `mapstructure:"storyPointField,omitempty" json:"storyPointField" gorm:"type:varchar(255)"`
-
-	// Priority field - custom field name/gid that contains priority
-	PriorityField string `mapstructure:"priorityField,omitempty" json:"priorityField" gorm:"type:varchar(255)"`
-
-	// Epic field - custom field name/gid that links tasks to epics
-	EpicField string `mapstructure:"epicField,omitempty" json:"epicField" gorm:"type:varchar(255)"`
-
-	// Severity field - custom field name/gid for severity (used for bugs/incidents)
-	SeverityField string `mapstructure:"severityField,omitempty" json:"severityField" gorm:"type:varchar(255)"`
-
-	// Due date handling
-	DueDateField string `mapstructure:"dueDateField,omitempty" json:"dueDateField" gorm:"type:varchar(255)"`
+	// Issue type mapping using regex patterns (like GitHub)
+	// Tags matching these patterns will classify the task type
+	IssueTypeRequirement string `mapstructure:"issueTypeRequirement,omitempty" json:"issueTypeRequirement" gorm:"type:varchar(255)"`
+	IssueTypeBug         string `mapstructure:"issueTypeBug,omitempty" json:"issueTypeBug" gorm:"type:varchar(255)"`
+	IssueTypeIncident    string `mapstructure:"issueTypeIncident,omitempty" json:"issueTypeIncident" gorm:"type:varchar(255)"`
 }
 
 func (AsanaScopeConfig) TableName() string {

@@ -42,13 +42,10 @@ func (asanaTask20250212) TableName() string {
 }
 
 type asanaScopeConfig20250212 struct {
-	TypeMappings    string `gorm:"type:json"`
-	ApplicationType string `gorm:"type:varchar(255)"`
-	StoryPointField string `gorm:"type:varchar(255)"`
-	PriorityField   string `gorm:"type:varchar(255)"`
-	EpicField       string `gorm:"type:varchar(255)"`
-	SeverityField   string `gorm:"type:varchar(255)"`
-	DueDateField    string `gorm:"type:varchar(255)"`
+	// Regex patterns for tag-based type classification (like GitHub)
+	IssueTypeRequirement string `gorm:"type:varchar(255)"`
+	IssueTypeBug         string `gorm:"type:varchar(255)"`
+	IssueTypeIncident    string `gorm:"type:varchar(255)"`
 }
 
 func (asanaScopeConfig20250212) TableName() string {

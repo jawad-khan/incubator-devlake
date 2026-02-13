@@ -28,5 +28,6 @@ func All() []plugin.MigrationScript {
 		new(addUserPhotoUrl),
 		new(addMissingTables),
 		new(addTaskTransformationFields),
+		new(addScopeConfigIssueTypeFields),
 	}
 }

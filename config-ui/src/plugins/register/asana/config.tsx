@@ -58,22 +58,9 @@ export const AsanaConfig: IPluginConfig = {
   scopeConfig: {
     entities: ['TICKET'],
     transformation: {
-      typeMappings: {
-        label: 'Issue Type Mappings',
-        externalInfo: 'Map Asana task types (default_task, milestone, approval) to standard types (REQUIREMENT, BUG, INCIDENT, EPIC, TASK, SUBTASK)',
-      },
-      storyPointField: {
-        label: 'Story Point Field',
-        subLabel: 'Custom field name containing story points',
-      },
-      priorityField: {
-        label: 'Priority Field',
-        subLabel: 'Custom field name containing priority',
-      },
-      applicationField: {
-        label: 'Application Type',
-        subLabel: 'Application type for categorization',
-      },
+      issueTypeRequirement: '(feat|feature|story|requirement)',
+      issueTypeBug: '(bug|defect|broken)',
+      issueTypeIncident: '(incident|outage|failure)',
     },
   },
 };

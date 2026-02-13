@@ -19,6 +19,8 @@ package tasks
 
 import (
 	"reflect"
+	"regexp"
+	"strings"
 
 	"github.com/apache/incubator-devlake/core/dal"
 	"github.com/apache/incubator-devlake/core/errors"
@@ -46,8 +48,11 @@ func ConvertTask(taskCtx plugin.SubTaskContext) errors.Error {
 	connectionId := data.Options.ConnectionId
 	projectId := data.Options.ProjectId
 
-	// Get scope config for type/status mappings
+	// Get scope config for transformation rules
 	scopeConfig := getScopeConfig(taskCtx)
+
+	// Get tags for tasks
+	taskTags := getTaskTags(db, connectionId)
 
 	clauses := []dal.Clause{
 		dal.From(&models.AsanaTask{}),
@@ -70,27 +75,29 @@ func ConvertTask(taskCtx plugin.SubTaskContext) errors.Error {
 		Convert: func(inputRow interface{}) ([]interface{}, errors.Error) {
 			toolTask := inputRow.(*models.AsanaTask)
 
-			// Map type and status using scope config
-			stdType, stdStatus := getStdTypeAndStatus(toolTask, scopeConfig)
+			// Get tags for this task
+			tags := taskTags[toolTask.Gid]
+
+			// Map type and status using scope config and tags
+			stdType, stdStatus := getStdTypeAndStatus(toolTask, scopeConfig, tags)
 
 			domainIssue := &ticket.Issue{
-				DomainEntity:   domainlayer.DomainEntity{Id: taskIdGen.Generate(toolTask.ConnectionId, toolTask.Gid)},
-				IssueKey:       toolTask.Gid,
-				Title:          toolTask.Name,
-				Description:    toolTask.Notes,
-				Url:            toolTask.PermalinkUrl,
-				Type:           stdType,
-				OriginalType:   toolTask.ResourceSubtype,
-				Status:         stdStatus,
-				OriginalStatus: getOriginalStatus(toolTask),
-				Priority:       toolTask.Priority,
-				StoryPoint:     toolTask.StoryPoint,
-				CreatedDate:    &toolTask.CreatedAt,
-				UpdatedDate:    toolTask.ModifiedAt,
-				ResolutionDate: toolTask.CompletedAt,
-				DueDate:        toolTask.DueOn,
-				CreatorName:    toolTask.CreatorName,
-				AssigneeName:   toolTask.AssigneeName,
+				DomainEntity:    domainlayer.DomainEntity{Id: taskIdGen.Generate(toolTask.ConnectionId, toolTask.Gid)},
+				IssueKey:        toolTask.Gid,
+				Title:           toolTask.Name,
+				Description:     toolTask.Notes,
+				Url:             toolTask.PermalinkUrl,
+				Type:            stdType,
+				OriginalType:    toolTask.ResourceSubtype,
+				Status:          stdStatus,
+				OriginalStatus:  getOriginalStatus(toolTask),
+				StoryPoint:      toolTask.StoryPoint,
+				CreatedDate:     &toolTask.CreatedAt,
+				UpdatedDate:     toolTask.ModifiedAt,
+				ResolutionDate:  toolTask.CompletedAt,
+				DueDate:         toolTask.DueOn,
+				CreatorName:     toolTask.CreatorName,
+				AssigneeName:    toolTask.AssigneeName,
 				LeadTimeMinutes: toolTask.LeadTimeMinutes,
 			}
 
@@ -105,8 +112,8 @@ func ConvertTask(taskCtx plugin.SubTaskContext) errors.Error {
 			// Set parent issue ID if this is a subtask
 			if toolTask.ParentGid != "" {
 				domainIssue.ParentIssueId = taskIdGen.Generate(connectionId, toolTask.ParentGid)
-				// If no type mapping and has parent, it's a subtask
-				if stdType == "" {
+				// If no type determined and has parent, it's a subtask
+				if stdType == "" || stdType == ticket.TASK {
 					domainIssue.Type = ticket.SUBTASK
 				}
 			}
@@ -146,81 +153,139 @@ func ConvertTask(taskCtx plugin.SubTaskContext) errors.Error {
 
 // getScopeConfig retrieves the scope config for transformation rules
 func getScopeConfig(taskCtx plugin.SubTaskContext) *models.AsanaScopeConfig {
+	logger := taskCtx.GetLogger()
 	if taskCtx.GetData() == nil {
+		logger.Info("getScopeConfig: taskCtx.GetData() is nil")
 		return nil
 	}
 	data := taskCtx.GetData().(*AsanaTaskData)
-	if data.Options.ScopeConfigId == 0 {
-		return nil
-	}
 	db := taskCtx.GetDal()
-	var scopeConfig models.AsanaScopeConfig
-	err := db.First(&scopeConfig, dal.Where("id = ?", data.Options.ScopeConfigId))
+
+	// First try to get by ScopeConfigId from options
+	if data.Options.ScopeConfigId != 0 {
+		var scopeConfig models.AsanaScopeConfig
+		err := db.First(&scopeConfig, dal.Where("id = ?", data.Options.ScopeConfigId))
+		if err == nil {
+			logger.Info("getScopeConfig: Found scope config by ID %d, IssueTypeRequirement=%s, IssueTypeBug=%s, IssueTypeIncident=%s",
+				data.Options.ScopeConfigId, scopeConfig.IssueTypeRequirement, scopeConfig.IssueTypeBug, scopeConfig.IssueTypeIncident)
+			return &scopeConfig
+		}
+		logger.Info("getScopeConfig: Failed to get scope config by ID %d: %v", data.Options.ScopeConfigId, err)
+	} else {
+		logger.Info("getScopeConfig: ScopeConfigId is 0, trying to get from project")
+	}
+
+	// Try to get scope config from project's scope_config_id
+	var project models.AsanaProject
+	err := db.First(&project, dal.Where("connection_id = ? AND gid = ?", data.Options.ConnectionId, data.Options.ProjectId))
 	if err != nil {
+		logger.Info("getScopeConfig: Failed to get project: %v", err)
 		return nil
 	}
-	return &scopeConfig
+
+	if project.ScopeConfigId != 0 {
+		var scopeConfig models.AsanaScopeConfig
+		err := db.First(&scopeConfig, dal.Where("id = ?", project.ScopeConfigId))
+		if err == nil {
+			logger.Info("getScopeConfig: Found scope config from project, IssueTypeRequirement=%s, IssueTypeBug=%s, IssueTypeIncident=%s",
+				scopeConfig.IssueTypeRequirement, scopeConfig.IssueTypeBug, scopeConfig.IssueTypeIncident)
+			return &scopeConfig
+		}
+		logger.Info("getScopeConfig: Failed to get scope config from project: %v", err)
+	} else {
+		logger.Info("getScopeConfig: Project has no scope_config_id")
+	}
+
+	return nil
 }
 
-// getStdTypeAndStatus maps Asana task to standard type and status
-func getStdTypeAndStatus(task *models.AsanaTask, scopeConfig *models.AsanaScopeConfig) (string, string) {
-	stdType := ""
-	stdStatus := ""
+// getTaskTags retrieves all tags for tasks and returns a map of taskGid -> []tagName
+func getTaskTags(db dal.Dal, connectionId uint64) map[string][]string {
+	result := make(map[string][]string)
+
+	var taskTags []models.AsanaTaskTag
+	err := db.All(&taskTags, dal.Where("connection_id = ?", connectionId))
+	if err != nil {
+		return result
+	}
+
+	// Get all tag names
+	tagNames := make(map[string]string)
+	var tags []models.AsanaTag
+	err = db.All(&tags, dal.Where("connection_id = ?", connectionId))
+	if err == nil {
+		for _, tag := range tags {
+			tagNames[tag.Gid] = tag.Name
+		}
+	}
+
+	// Build taskGid -> []tagName map
+	for _, tt := range taskTags {
+		if tagName, ok := tagNames[tt.TagGid]; ok {
+			result[tt.TaskGid] = append(result[tt.TaskGid], tagName)
+		}
+	}
+
+	return result
+}
+
+// getStdTypeAndStatus maps Asana task to standard type and status using regex patterns (like GitHub)
+func getStdTypeAndStatus(task *models.AsanaTask, scopeConfig *models.AsanaScopeConfig, tags []string) (string, string) {
+	stdType := ticket.TASK
+	stdStatus := ticket.TODO
 
 	// Default status based on completion
 	if task.Completed {
 		stdStatus = ticket.DONE
-	} else {
-		stdStatus = ticket.TODO
 	}
 
-	// Use pre-computed values if available
-	if task.StdType != "" {
-		stdType = task.StdType
-	}
-	if task.StdStatus != "" {
-		stdStatus = task.StdStatus
+	// If no scope config, return defaults
+	if scopeConfig == nil {
+		return getDefaultType(task), stdStatus
 	}
 
-	// Apply scope config mappings if available
-	if scopeConfig != nil && scopeConfig.TypeMappings != nil {
-		// Map resource_subtype to standard type
-		if typeMapping, ok := scopeConfig.TypeMappings[task.ResourceSubtype]; ok {
-			if typeMapping.StandardType != "" {
-				stdType = typeMapping.StandardType
-			}
-			// Map section name to status if available
-			if task.SectionName != "" && typeMapping.StatusMappings != nil {
-				if statusMapping, ok := typeMapping.StatusMappings[task.SectionName]; ok {
-					if statusMapping.StandardStatus != "" {
-						stdStatus = statusMapping.StandardStatus
-					}
-				}
-			}
-		}
+	// Combine all tags into a single string for matching
+	tagString := strings.ToLower(strings.Join(tags, " "))
+
+	// Match issue type using regex patterns (like GitHub)
+	if scopeConfig.IssueTypeRequirement != "" && matchPattern(tagString, scopeConfig.IssueTypeRequirement) {
+		stdType = ticket.REQUIREMENT
+	}
+	if scopeConfig.IssueTypeBug != "" && matchPattern(tagString, scopeConfig.IssueTypeBug) {
+		stdType = ticket.BUG
+	}
+	if scopeConfig.IssueTypeIncident != "" && matchPattern(tagString, scopeConfig.IssueTypeIncident) {
+		stdType = ticket.INCIDENT
 	}
 
-	// Default type mapping based on resource_subtype
-	// Asana terminology: default_task, milestone, approval, section
-	if stdType == "" {
-		switch task.ResourceSubtype {
-		case "milestone":
-			stdType = ticket.REQUIREMENT // Milestones represent key deliverables
-		case "approval":
-			stdType = ticket.TASK
-		case "section":
-			stdType = ticket.TASK // Sections are just groupings, not tasks themselves
-		default:
-			if task.ParentGid != "" {
-				stdType = ticket.SUBTASK
-			} else {
-				stdType = ticket.TASK
-			}
-		}
+	// If no type matched and task is a subtask, mark it as subtask
+	if stdType == ticket.TASK && task.ParentGid != "" {
+		stdType = ticket.SUBTASK
 	}
 
 	return stdType, stdStatus
 }
+
+// getDefaultType returns the default type based on task properties
+func getDefaultType(task *models.AsanaTask) string {
+	if task.ParentGid != "" {
+		return ticket.SUBTASK
+	}
+	return ticket.TASK
+}
+
+// matchPattern checks if the input string matches the regex pattern
+func matchPattern(input, pattern string) bool {
+	if pattern == "" {
+		return false
+	}
+	re, err := regexp.Compile("(?i)" + pattern)
+	if err != nil {
+		return false
+	}
+	return re.MatchString(input)
+}
+
 
 // getOriginalStatus returns the original status string
 func getOriginalStatus(task *models.AsanaTask) string {
